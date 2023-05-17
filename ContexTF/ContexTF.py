@@ -11,10 +11,40 @@ def arguments():
     Define the input arguments of the program.
     '''
 
-    parser = argparse.ArgumentParser(description = 'pipeline')
+    parser = argparse.ArgumentParser(description = 'ContexTF 1.0: functional annotation of prokaryotic regulatory elements')
 
     required_arg = parser.add_argument_group('Required arguments')
     optional_arg = parser.add_argument_group('Optional arguments')
+
+    required_arg.add_argument('-fna', '--fasta_file',
+                    dest = 'fastafile',
+                    action = 'store',
+                    default = None,
+                    required = True,
+                    help = 'Required argument. It must be a genomic FASTA formatted file containing the whole genome to study.')
+
+    required_arg.add_argument('-gff3', '--gff3_file',
+                    dest = 'gff3file',
+                    action = 'store',
+                    default = None,
+                    required = True,
+                    help = 'Required argument. It must be a GFF3 formatted file containing the annotations of the genomic FASTA file.')
+    
+    optional_arg.add_argument('--tmalign',
+                    dest = 'tmalign',
+                    action = 'store_true',
+                    default = None,
+                    required = False,
+                    help = 'Optional argument. If defined, ContexTF will perform structural comparisons between the reference TF and the candidates.')
+    
+    optional_arg.add_argument('--tmalign_min_threshold',
+                dest = 'tmalign_min_threshold',
+                type=float,
+                default=0.5,
+                required = False,
+                help = 'Optional argument. If defined, ContexTF will perform structural comparisons between the reference TF and the candidates.')
+    
+    return parser.parse_args()
 
 # LOGGING FILE
 def logger():
@@ -22,7 +52,7 @@ def logger():
     Logging file and stdout configuration.
     '''
     logging.basicConfig(level=logging.INFO,
-                        filename='pipeline.log',
+                        filename='ContexTF.log',
                         format='%(levelname)s: %(asctime)s %(message)s',
                         filemode='w')
 
@@ -195,27 +225,19 @@ def GC_module(hmmer_df, path2gff=None, path2fna=None, TM_Align_file=None, n_flan
 
 def main():
     '''
-    Execute the WhatTF pipeline. There's X different modules that can be executed independently
+    Execute the ContexTF pipeline. There's 3 different modules that can be executed independently
     when providing the needed files.
     '''
 
-    # get parameters and raise input errors
-    ## Input ##
-    '''
-    -gff
-    -fna
-
-    '''
-
     # SETUP
-    named_tuple = time.localtime()
-    time_string = time.strftime('%H:%M:%S', named_tuple)
-    start = time_string
-
-
-  
+    args = arguments()
     logger()
-    logging.info('Time of start:{}'.format(start))
+    logging.info('Time of start')
+
+    # Process input files 
+
+
+
     # current_directory = os.getcwd()
     current_directory = '/home/maria/pipeline_testing'
     os.chdir(current_directory)
@@ -224,19 +246,14 @@ def main():
     path2gff = current_directory+'/'+'input/GCA_000008345.1_ASM834v1_genomic.gff'
     path2fna = current_directory+'/'+'input/GCA_000008345.1_ASM834v1_genomic.fna'
 
-
-    # 1. Obtain proteome
-    organism_proteome = obtain_cds_proteins_from_genome(path2gff, path2fna, current_directory=current_directory)
-
-    # 2. HMMER
+    # # 1. Obtain proteome
+    # organism_proteome = obtain_cds_proteins_from_genome(path2gff, path2fna, current_directory=current_directory)
+    # # 2. HMMER
     # hmmer_df = HMMER_module(organism_proteome, current_directory=current_directory)
-    data = pd.read_csv('/home/maria/pipeline_testing/HMMER/hmmsearch_hits_all_domains_parsed.tsv', sep='\t')
-    hmmer_df = pd.DataFrame(data)
-    # 3. TM-Align
+    # # 3. TM-Align
     # TMalign_results_file = TMAlign_module(hmmer_df, time_string=time_string)
-    TMalign_results_file = '/home/maria/pipeline_testing/TMalign/best_alignments.tsv'
-    # 4. GCsnap
-    GC_module(hmmer_df, path2gff=path2gff, path2fna=path2fna, TM_Align_file=TMalign_results_file, n_flanking=6)
+    # # 4. GCsnap
+    # GC_module(hmmer_df, path2gff=path2gff, path2fna=path2fna, TM_Align_file=TMalign_results_file, n_flanking=6)
 
 
 
