@@ -1,0 +1,13 @@
+name: ContexTF_env
+dependencies:
+  - python=3.10
+  - conda-forge::pandas=2.0
+  - conda-forge::numpy=1.24
+  - conda-forge::biopython=1.81
+  - conda-forge::matplotlib=3.7
+  - pip
+  - pip:
+    - bcbio-gff==0.7
+    - pygenomeviz==0.3
+    - scipy==1.10
+    - soothsayer-utils==2022.6.24

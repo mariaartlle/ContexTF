@@ -238,8 +238,7 @@ def main():
 
 
 
-    # current_directory = os.getcwd()
-    current_directory = '/home/maria/pipeline_testing'
+    current_directory = os.getcwd()
     os.chdir(current_directory)
 
     # Process and evaluate the input 
