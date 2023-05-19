@@ -38,11 +38,32 @@ def arguments():
                     help = 'Optional argument. If defined, ContexTF will perform structural comparisons between the reference TF and the candidates.')
     
     optional_arg.add_argument('--tmalign_min_threshold',
-                dest = 'tmalign_min_threshold',
-                type=float,
-                default=0.5,
-                required = False,
-                help = 'Optional argument. If defined, ContexTF will perform structural comparisons between the reference TF and the candidates.')
+                    dest = 'tmalign_min_threshold',
+                    type=float,
+                    default=0.5,
+                    required = False,
+                    help = 'Optional argument. Takes a float between 0 and 1, o.5 as default. If defined, ContexTF will only consider as candidates superimpositions with TM-score above the threshold.')
+    
+    optional_arg.add_argument('--n_flanking',
+                    dest = 'n_flanking',
+                    type=int,
+                    default=6,
+                    required = False,
+                    help = 'Optional argument. Number of flanking genes to plot upstream and downstream of each TF candidate, 4 as default value.')
+    
+    optional_arg.add_argument('--n_flanking3',
+                    dest = 'n_flanking3',
+                    type=int,
+                    default=6,
+                    required = False,
+                    help = "Optional argument. Number of flanking genes to plot in the 3' site.")
+    
+    optional_arg.add_argument('--n_flanking5',
+                    dest = 'n_flanking5',
+                    type=int,
+                    default=6,
+                    required = False,
+                    help = "Optional argument. Number of flanking genes to plot in the 5' site.")
     
     return parser.parse_args()
 
@@ -53,17 +74,19 @@ def logger():
     '''
     logging.basicConfig(level=logging.INFO,
                         filename='ContexTF.log',
-                        format='%(levelname)s: %(asctime)s %(message)s',
+                        format='%(levelname)s|%(asctime)s: %(message)s',
+                        datefmt='%Y-%m-%d|%H:%M:%S',
                         filemode='w')
 
     # print info into stdout and logging file
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(message)s')
+    formatter = logging.Formatter("%(levelname)s|%(asctime)s: %(message)s",
+                              "%Y-%m-%d|%H:%M:%S")
     console.setFormatter(formatter)
     logging.getLogger().addHandler(console)
 
-def HMMER_module(organism_proteome, current_directory='.', structural_superimposition=True, db_fasta='/home/maria/acnes_sensors/TF_databases/non_redundant_files/TF_database_merged.fasta', db_tsv='/home/maria/acnes_sensors/TF_databases/non_redundant_files/TF_database_merged.tsv'):
+def HMMER_module(organism_proteome, structural_superimposition=False, current_directory='.', executable_path='.', db_fasta='/TF_databases/TF_database_merged.fasta', db_tsv='/TF_databases/TF_database_merged.tsv'):
     '''
     When HMMER3 locally installed and provided with 2 fastas:
         1. Downloads and prepares the Pfam-A database.
@@ -101,13 +124,12 @@ def HMMER_module(organism_proteome, current_directory='.', structural_superimpos
             os.system('hmmpress {}Pfam-A.hmm'.format(current_directory))
 
     # 2. hmmscan of db_fasta
-    
     if os.path.exists(current_directory+'/'+'hmmscan_output_parsed.tsv') == True:
-        logging.info('hmmscan file found (version: [time]), proceding with hmmsearch')
+        logging.info('hmmscan file found (version: {}), proceding with hmmsearch'.format(os.path.getmtime(current_directory+'/'+'hmmscan_output_parsed.tsv')))
         hmmscan_file = current_directory+'/'+'hmmscan_output_parsed.tsv'
     else: 
         logging.info('Starting hmmscan...')
-        os.system('hmmscan -E 0.001 --domtblout {}hmmscan_out.tsv {}Pfam-A.hmm {} > hmmscan.out'.format(current_directory, current_directory, db_fasta))
+        os.system('hmmscan -E 0.001 --domtblout {}hmmscan_out.tsv {}Pfam-A.hmm {} > hmmscan.out'.format(current_directory, current_directory, executable_path+db_fasta))
         logging.info('hmmscan of {} finished.'.format(db_fasta.split('/')[-1]))
 
         # 2.1 Parse the output hmmscan file and remove overlapping domains with lower e-values
@@ -128,7 +150,7 @@ def HMMER_module(organism_proteome, current_directory='.', structural_superimpos
         logging.info('Starting hmmsearch...')
         os.system('hmmsearch --domtblout hmmsearch_out.tsv -E 0.001 hmmfetch_out {} > hmmsearch.out'.format(organism_proteome))
         logging.info('hmmsearch of domains retrieved from {} into {} done'.format(db_fasta.split('/')[-1], organism_proteome.split('/')[-1]))
-        hmmsearch_file = hmmsearch_parser('hmmsearch_out.tsv', hmmscan_file, db_tsv)
+        hmmsearch_file = hmmsearch_parser('hmmsearch_out.tsv', hmmscan_file, executable_path+db_tsv)
 
     hmmer_df = only_hits_with_all_domains(hmmsearch_file)
 
@@ -152,9 +174,9 @@ def HMMER_module(organism_proteome, current_directory='.', structural_superimpos
 
     return hmmer_df
 
-def TMAlign_module(hmmer_df, time_string=None):
+def TMAlign_module(hmmer_df, TMAlign_threshold=None):
     '''
-    When US-Align is compiled on your local machine:
+    When TM-Align is compiled on your local machine:
         1. Downloads the AlphaFold predicted structure of every protein
         2. Performs pair-wise alignments between the reference protein and every hit in the target proteome
         3. Produces a parseable output summary of the alignments with structural superimposition results
@@ -164,16 +186,16 @@ def TMAlign_module(hmmer_df, time_string=None):
     os.chdir('TMalign')
     pwd = os.getcwd()
     # 1. Downloads the AlphaFold predicted structure of every protein
-    superimposition_dict = get_alphafolds(hmmer_df, pwd=pwd, time_string=time_string)
+    superimposition_dict = get_alphafolds(hmmer_df, pwd=pwd)
     # 2. Performs pair-wise alignments between the reference protein and every hit in the target proteome
-    superimposition_dict = TM_align(superimposition_dict, TMAlign_folder=pwd, time_string=time_string)
+    superimposition_dict = TM_align(superimposition_dict, TMAlign_folder=pwd)
     # 3. Produces a parseable output summary of the alignments with structural superimposition results
-    TMalign_results_file = TM_align_parser(superimposition_dict, TMAlign_folder=pwd, summary_each_TF=True)
+    TMalign_results_file = TM_align_parser(superimposition_dict, TMAlign_threshold=TMAlign_threshold, TMAlign_folder=pwd)
     logging.info('Parsing of TMalign results done.')
     os.chdir('../')
     return TMalign_results_file
 
-def GC_module(hmmer_df, path2gff=None, path2fna=None, TM_Align_file=None, n_flanking = None, n_flanking5=None, n_flanking3=None):
+def GC_module(hmmer_df, path2gff=None, path2fna=None, TM_Align_file=None, n_flanking5=None, n_flanking3=None):
     '''
 
     :return:
@@ -188,11 +210,8 @@ def GC_module(hmmer_df, path2gff=None, path2fna=None, TM_Align_file=None, n_flan
 
     # 1. Get the target dict with targets and gff and fna path for all targets
     targets_dict = retrieve_targets_dict(hmmer_df, path2gff=path2gff, path2fna=path2fna, TM_Align_file=TM_Align_file)
-    # print(targets_dict)
+
     # 2. Retrieve the genomic context for each target and candidates
-    if n_flanking != None:
-        n_flanking3 = n_flanking
-        n_flanking5 = n_flanking
 
     plasmids = ['AAP70493.1','ADO85569.1','AEM66515.1','AAA21920.1','BAD11074.1','AAP83141.1','BAB32408.1','AFI98560.1','ACO06750.1','AAB36583.1','AAK38101.1', 'ANB66399.1', 'AAG00065.1', 'AAA25445.1', 'AAA68939.2', 'CAC87048.1', 'BAA36282.1']
     
@@ -234,25 +253,53 @@ def main():
     logger()
     logging.info('Time of start')
 
-    # Process input files 
+    # get path of the executable 
+    executable_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-
-
+    # establish current directory
     current_directory = os.getcwd()
     os.chdir(current_directory)
 
-    # Process and evaluate the input 
-    path2gff = current_directory+'/'+'input/GCA_000008345.1_ASM834v1_genomic.gff'
-    path2fna = current_directory+'/'+'input/GCA_000008345.1_ASM834v1_genomic.fna'
+    # Process arguments
 
-    # # 1. Obtain proteome
-    # organism_proteome = obtain_cds_proteins_from_genome(path2gff, path2fna, current_directory=current_directory)
-    # # 2. HMMER
-    # hmmer_df = HMMER_module(organism_proteome, current_directory=current_directory)
-    # # 3. TM-Align
-    # TMalign_results_file = TMAlign_module(hmmer_df, time_string=time_string)
-    # # 4. GCsnap
-    # GC_module(hmmer_df, path2gff=path2gff, path2fna=path2fna, TM_Align_file=TMalign_results_file, n_flanking=6)
+    fastafile = args.fastafile
+    gff3file = args.gff3file
+
+    n_flanking = args.n_flanking
+    n_flanking5 = args.n_flanking5
+    n_flanking3 = args.n_flanking3
+    if n_flanking3 == n_flanking5 and n_flanking != n_flanking3:
+        if n_flanking != 4:
+            n_flanking3 = n_flanking
+            n_flanking5 = n_flanking
+
+
+    # Execute pipeline
+    if os.path.isfile(fastafile) and os.path.isfile(gff3file):
+
+        # 1. Obtain proteome
+        organism_proteome = obtain_cds_proteins_from_genome(gff3file, fastafile, current_directory=current_directory)
+
+        if args.tmalign: 
+            tmalign_min_threshold = args.tmalign_min_threshold
+
+            # 2. HMMER
+            hmmer_df = HMMER_module(organism_proteome, structural_superimposition=True, current_directory=current_directory, executable_path=executable_path)
+            # 3. TM-Align
+            TMalign_results_file = TMAlign_module(hmmer_df, TMAlign_threshold=tmalign_min_threshold)
+            # 4. Genomic Context plotting of the TM_align candidates
+            GC_module(hmmer_df, path2gff=gff3file, path2fna=fastafile, TM_Align_file=TMalign_results_file, n_flanking5=n_flanking5, n_flanking3=n_flanking3)
+        else: 
+            # 2. HMMER
+            hmmer_df = HMMER_module(organism_proteome, current_directory=current_directory)
+            # 4. Genomic Context plotting of the HMMER candidates
+            GC_module(hmmer_df, path2gff=gff3file, path2fna=fastafile, n_flanking5=n_flanking5, n_flanking3=n_flanking3)
+
+        
+
+
+
+
 
 
 

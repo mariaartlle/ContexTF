@@ -508,9 +508,9 @@ def check_pLDDT(pdbfile, protein_percentage = 10):
             else:
                 outfile.write(line)
 
-def get_alphafolds(hmmer_df, pwd='.', time_string = None):
+def get_alphafolds(hmmer_df, pwd='.'):
     
-    logging.info('{}...Downloading the AlphaFold structures from UniprotIDs'.format(time_string))
+    logging.info('...Downloading the AlphaFold structures from UniprotIDs')
     # set working directory the folder in which all the TF folders with the alphafolds will be created
     os.chdir(pwd)
 
@@ -569,14 +569,14 @@ def get_alphafolds(hmmer_df, pwd='.', time_string = None):
     logging.info('All AlphaFold structures downloaded')
     return superimposition_dict
 
-def TM_align(superimposition_dict, TMAlign_folder='.', time_string = None):
+def TM_align(superimposition_dict, TMAlign_folder='.'):
     '''
     Relies in a local installation of TM-Align (https://zhanggroup.org/TM-align/).
     When provided a list with the names of the folders created after executing the get_alphafolds() function.
     In each folder the TM-Align pairwise comparisons are performed for each hit and the reference TF protein.
     The output of all comparisons along their TM-scores are merged in a file '{TF_name}.out'.
     '''
-    logging.info('{}...Performing pair-wise structural superimpositions'.format(time_string))
+    logging.info('...Performing pair-wise structural superimpositions')
     os.chdir(TMAlign_folder)
     for refuniprot, values in superimposition_dict.items():
         for target in values['targets']:
@@ -589,7 +589,7 @@ def TM_align(superimposition_dict, TMAlign_folder='.', time_string = None):
 
     return superimposition_dict
 
-def TM_align_parser(superimposition_dict, TMAlign_folder='.', TMAlign_threshold=0.5, summary_each_TF=False):
+def TM_align_parser(superimposition_dict, TMAlign_threshold=0.5, summary_each_TF=False):
     '''
     Filters all pair-wise comparisons made by TM-Align based on a threshold for the TM-score (default=0.5).
     Provides a summary csv with the best alignments and statistics for each TF.
