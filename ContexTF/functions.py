@@ -12,7 +12,7 @@ from functools import reduce
 from operator import itemgetter
 from itertools import groupby, chain
 from collections import Counter
-from Bio import SeqIO, Seq, Entrez
+from Bio import SeqIO, Seq
 from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
 from Bio.Blast import NCBIXML
@@ -556,7 +556,7 @@ def get_alphafolds(hmmer_df, pwd='.'):
                 for key, values in superimposition_dict1.items():
                     if uniprot in values['targets']:
                         # remove from the superimposition_dict the target protein without structure available
-                        temp = values['targets']
+                        temp = list(set(values['targets']))
                         temp.remove(uniprot)
                         superimposition_dict[key] = {
                             'targets': temp,
@@ -579,23 +579,23 @@ def TM_align(superimposition_dict, TMAlign_folder='.'):
     logging.info('...Performing pair-wise structural superimpositions')
     os.chdir(TMAlign_folder)
     for refuniprot, values in superimposition_dict.items():
-        for target in values['targets']:
-            os.system('TMalign reference_alphafolds/ref{}.pdb target_alphafolds/{}.pdb -o {}.sup > {}.out'.format(refuniprot, target, target, target))
-        os.system('cat *.out > {}.txt'.format(refuniprot))
-        os.system('rm *sup*')
-        os.system('rm *out')
+        if '{}.txt'.format(refuniprot) not in os.listdir('.'):
+            for target in values['targets']:
+                os.system('TMalign reference_alphafolds/ref{}.pdb target_alphafolds/{}.pdb -o {}.sup > {}.out'.format(refuniprot, target, target, target))
+            os.system('cat *.out > {}.txt'.format(refuniprot))
+            os.system('rm *sup*')
+            os.system('rm *out')
 
-    logging.info('All structural superimpositions performed.')
+    logging.info('All {} structural superimpositions performed.'.format(len(superimposition_dict)))
 
     return superimposition_dict
 
 def TM_align_parser(superimposition_dict, TMAlign_threshold=0.5, summary_each_TF=False):
     '''
     Filters all pair-wise comparisons made by TM-Align based on a threshold for the TM-score (default=0.5).
-    Provides a summary csv with the best alignments and statistics for each TF.
+    Provides a summary tsv with the best alignments and statistics for each TF.
     '''
     with open('best_alignments.tsv', 'w') as outfile:
-        # outfile.write('TF_family\tTF\tUniprot_acnes\tTM_score\tRMSD\tRatio_aaIdentical/aaAligned\n')
         outfile.write('TF\tTarget_uniprot\tTM_score\tRMSD\tRatio_aaIdentical/aaAligned\n')
     
     for uniprotTF, values in superimposition_dict.items():
@@ -606,8 +606,8 @@ def TM_align_parser(superimposition_dict, TMAlign_threshold=0.5, summary_each_TF
             for i in range(len(lines)):
                 if lines[i].startswith(' *') and lines[i+6].startswith('Name of Chain_1:'):
                     uniprot_acnes = str(lines[i+7].split(' ')[3]).strip('.pdb').strip('target_alphafolds/')
-                    RMSD = str(lines[i+11].split(' ')[6]).strip(',')
-                    ratio_identical_aligned = lines[i+11].split(' ')[8]
+                    RMSD = str(lines[i+11].split(',')[1]).strip(' RMSD=').strip()
+                    ratio_identical_aligned = lines[i+11].split(',')[2].strip(' Seq_ID=n_identical/n_aligned= ').strip()
                     TM_score = lines[i+12].split(' ')[1]
                     tm_dict[uniprot_acnes] = { 'TM_score': float(TM_score),
                                                 'RMSD': RMSD,
@@ -622,6 +622,7 @@ def TM_align_parser(superimposition_dict, TMAlign_threshold=0.5, summary_each_TF
             with open('{}_score_summary.out'.format(values['alias']), 'w') as outfile:
                 outfile.write('Summary of pair-wise alignments of {}\n\n'.format(values['alias']))
                 outfile.write('Best pair-wise alignments: {}\n'.format(len(better_alignments)))
+
                 if len(better_alignments) != 0:
                     outfile.write('Uniprot_acnes\tTM_score\tRMSD\tRatio_aaIdentical/aaAligned\n')
                 for element in better_alignments:
@@ -640,7 +641,6 @@ def TM_align_parser(superimposition_dict, TMAlign_threshold=0.5, summary_each_TF
 
         with open('best_alignments.tsv', 'a') as outfile:
             for element in better_alignments:
-                # outfile.write('{}\t'.format(str(fam_dict[out]).strip("''[]")))
                 outfile.write('{}\t'.format(values['alias']))
                 outfile.write('{}\t'.format(element))
                 outfile.write('{}\t{}\t{}\t'.format(tm_dict[element]['TM_score'], tm_dict[element]['RMSD'],tm_dict[element]['ratio']))
@@ -651,7 +651,7 @@ def TM_align_parser(superimposition_dict, TMAlign_threshold=0.5, summary_each_TF
 
 ### 4. GENOMIC CONTEXT MODULE FUNCTIONS ###
 # 4.1 Obtain a dictionary with all the targets and their correspondant genomic files
-def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=None):
+def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=None, executable_path='.'):
     '''
     Parses the provided file into a dictionary with the identifiers of the target proteins and
     the reference proteins to which have mapped.
@@ -659,24 +659,21 @@ def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=N
     :param TM_Align: if True, takes the output file of executing the TM_Align_module, if set False
                     takes the dataframe of the HMMER_module
     '''
-    dbdf = pd.read_csv('/home/maria/acnes_sensors/TF_databases/non_redundant_files/TF_database_merged.tsv', sep='\t')
+    dbdf = pd.read_csv(executable_path+'TF_databases/TF_database_merged.tsv', sep='\t')
 
     def download_genomic_files(dict2download):
         logging.info('GC module: downloading genomic files to plot genomic context...')
         downloaded_dict = {}
-        if os.path.isdir('temp'):
-            os.chdir('temp')
+        if os.path.isdir('downloaded_files'):
+            os.chdir('downloaded_files')
         else:
-            os.mkdir('temp')
-            os.chdir('temp')
+            os.mkdir('downloaded_files')
+            os.chdir('downloaded_files')
         currentdir = os.getcwd()
         for key, values in dict2download.items():
             if 'https' in values['link']:
                 link = values['link'] +'/'+ values['link'].split('/')[-1]
                 if link.split('/')[-1]+'_genomic.gff' in os.listdir():
-                    # if os.path.exists(currentdir+'/'+link.split('/')[-1]+'_protein.faa'):
-                    #     faa = currentdir+'/'+link.split('/')[-1]+'_protein.faa'
-                    #     fna = None
                     if os.path.exists(currentdir+'/'+link.split('/')[-1]+'_genomic.fna'):
                         fna = currentdir+'/'+link.split('/')[-1]+'_genomic.fna'
                         faa = None
@@ -684,20 +681,10 @@ def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=N
                 else:
                     url = link+'_genomic.gff.gz'
                     req = rec.urlretrieve(url, '{}'.format(url.split('/')[-1]))
-                    # url = link+'_protein.faa.gz'
-                    # req1 = rec.urlopen(url)
-                    # if req1.code == 200:
-                    #     req = rec.urlretrieve(url, '{}'.format(url.split('/')[-1]))
-                    #     faa = currentdir+'/'+link.split('/')[-1]+'_protein.faa'
-                    #     fna = None
-                    # else:
                     url = link+'_genomic.fna.gz'
                     req = rec.urlretrieve(url, '{}'.format(url.split('/')[-1]))
                     faa = None
                     fna = currentdir+'/'+link.split('/')[-1]+'_genomic.fna'
-                    # urls = [link+'_genomic.gff.gz', link+'_genomic.fna.gz', link+'_protein.faa.gz']
-                    # for url in urls:
-                    #     req = rec.urlretrieve(url, '{}'.format(url.split('/')[-1]))
                     os.system('gunzip *.gz')
 
                 downloaded_dict[key] = {
@@ -707,18 +694,10 @@ def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=N
                 'faa': faa
                 }
             else:
-                # if key == 'BAA03510.1':
-                #     downloaded_dict[key] = {
-                #     'uniprot': values['uniprot'],
-                #     'gff': '/home/maria/acnes_sensors/TF_databases/genomes4gc/D14680.1_genomic.gff3',
-                #     'fna': '/home/maria/acnes_sensors/TF_databases/genomes4gc/D14680.1_genomic.fna',
-                #     'faa': None
-                #     }
-                # else:
                 downloaded_dict[key] = {
                 'uniprot': values['uniprot'],
-                'gff': '/home/maria/acnes_sensors'+values['link'].split('|')[0].strip('..'),
-                'fna': '/home/maria/acnes_sensors'+values['link'].split('|')[1].strip('..'),
+                'gff': executable_path+values['link'].split('|')[0].strip('../'),
+                'fna': executable_path+values['link'].split('|')[1].strip('../'),
                 'faa': None
                 }
         os.chdir('../')
@@ -788,6 +767,7 @@ def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=N
         'targets': tmp_dict
         }
     del downloaded_dict, targets_dict1, tmp, tmp_dict
+
     return targets_dict
 
 # 4.2 Routines to obtain the genomic contexts from the local gneomic files
@@ -1319,7 +1299,7 @@ def find_and_add_protein_families(in_syntenies, out_label = 'default', num_threa
     return in_syntenies, protein_families
 
 # 4.5 Draw the genomic context and save it as a .png
-def draw_genomic_context(all_syntenies, protein_families_summary, targets_dict):
+def draw_genomic_context(all_syntenies, protein_families_summary, targets_dict, save_dir='.'):
     families_flat = {}
     color_dict = {}
     cmap = cm.get_cmap('tab20', len(protein_families_summary.keys()))
@@ -1409,5 +1389,5 @@ def draw_genomic_context(all_syntenies, protein_families_summary, targets_dict):
     
     fig.legend(handles=markers, loc='center left', bbox_to_anchor=(1, 0.5), title="Families")
 
-    fig.savefig("{}.png".format(figname))
+    fig.savefig("{}.png".format(save_dir+figname))
 
