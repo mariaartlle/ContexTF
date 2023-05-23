@@ -1703,8 +1703,8 @@ def GC_module(hmmer_df, path2gff=None, path2fna=None, TM_Align_file=None, n_flan
     # 1. Get the target dict with targets and gff and fna path for all targets
     targets_dict = retrieve_targets_dict(hmmer_df, path2gff=path2gff, path2fna=path2fna, TM_Align_file=TM_Align_file, executable_path=executable_path)
 
-    plasmids = ['AAP70493.1','ADO85569.1','AEM66515.1','AAA21920.1','BAD11074.1','AAP83141.1','BAB32408.1','AFI98560.1','ACO06750.1','AAB36583.1','AAK38101.1', 'ANB66399.1', 'AAG00065.1', 'AAA25445.1', 'AAA68939.2', 'CAC87048.1', 'BAA36282.1']
-    
+    plasmids = ['CAC00710.1','CAA42755.1','AJ278371','ACM50924.1','CAB82848.1','CAA43986.1','AAC36842.1','AAA25771.1','BAA95688.1','CAA70737.1','AAM93193.1', 'AAP70493.1','ADO85569.1','AEM66515.1','AAA21920.1','BAD11074.1','AAP83141.1','BAB32408.1','AFI98560.1','ACO06750.1','AAB36583.1','AAK38101.1', 'ANB66399.1', 'AAG00065.1', 'AAA25445.1', 'AAA68939.2', 'CAC87048.1', 'BAA36282.1']
+
     if os.path.isdir('GC_figures') == False:
         os.mkdir('GC_figures')
     figures_dir = pwd+'/GC_figures/'
