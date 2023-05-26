@@ -1,0 +1,3 @@
+Alias	UniprotID	Accession_mapped	Assembly_id	Assembly_link
+ArnR	A4QDE6	NCBI protein accession	NCBI genome or assembly accesion	NCBI FTP link (ex. https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/010/225/GCF_000010225.1_ASM1022v1)
+AztR	Q8ZS91	NCBI protein accession	NCBI genome or assembly accesion	absolute local paths separated by “|”, first gff3 (ex. /your/local/path/to/GFF3|/your/local/path/to/FNA)

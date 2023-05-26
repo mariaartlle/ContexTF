@@ -792,7 +792,7 @@ def TM_align_parser(superimposition_dict, TMAlign_threshold=0.5, summary_each_TF
 
 ### 4. GENOMIC CONTEXT MODULE FUNCTIONS ###
 # 4.1 Obtain a dictionary with all the targets and their correspondant genomic files
-def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=None, executable_path='.'):
+def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=None, db_tsv=None, executable_path='.'):
     '''
     Parses the provided file into a dictionary with the identifiers of the target proteins and
     the reference proteins to which have mapped.
@@ -800,7 +800,7 @@ def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=N
     :param TM_Align: if True, takes the output file of executing the TM_Align_module, if set False
                     takes the dataframe of the HMMER_module
     '''
-    dbdf = pd.read_csv(executable_path+'TF_databases/TF_database_merged.tsv', sep='\t')
+    dbdf = pd.read_csv(db_tsv, sep='\t')
 
     def download_genomic_files(dict2download):
         logging.info('GC module: downloading genomic files to plot genomic context...')
@@ -834,11 +834,18 @@ def retrieve_targets_dict(hmmer_df, path2gff= '.', path2fna='.', TM_Align_file=N
                 'fna': fna,
                 'faa': faa
                 }
-            else:
+            elif 'genomes4gc' in values['link']:
                 downloaded_dict[key] = {
                 'uniprot': values['uniprot'],
                 'gff': executable_path+values['link'].split('|')[0].strip('../'),
                 'fna': executable_path+values['link'].split('|')[1].strip('../'),
+                'faa': None
+                }
+            else:
+                downloaded_dict[key] = {
+                'uniprot': values['uniprot'],
+                'gff': values['link'].split('|')[0],
+                'fna': values['link'].split('|')[1],
                 'faa': None
                 }
         os.chdir('../')
@@ -1537,6 +1544,8 @@ def arguments():
     required_arg.add_argument('-gff3', '--gff3_file', dest = 'gff3file', action = 'store', default = None, required = True, help = 'Required argument. It must be a GFF3 formatted file containing the annotations of the genomic FASTA file.')
     
     # Optional arguments 
+    optional_arg.add_argument('--custom_db_tsv', dest='custom_db_tsv', default=None, required = False, help = 'Optional argument. Provide the path of your custom database (.tsv file following the template provided in the documentation), by default will use the TF database.')
+    optional_arg.add_argument('--custom_db_fasta', dest='custom_db_fasta', default=None, required = False, help = 'Optional argument. Provide the path of your database sequences (.fasta file following the template provided in the documentation), by default will use the TF database.')
     optional_arg.add_argument('--tmalign', dest = 'tmalign', action = 'store_true', default = None, required = False, help = 'Optional argument. If defined, ContexTF will perform structural comparisons between the reference TF and the candidates.')    
     optional_arg.add_argument('--tmalign_min_threshold', dest = 'tmalign_min_threshold', type=float, default=0.5, required = False, help = 'Optional argument. Takes a float between 0 and 1, o.5 as default. If defined, ContexTF will only consider as candidates superimpositions with TM-score above the threshold.')
     optional_arg.add_argument('--n_flanking', dest = 'n_flanking', type=int, default=6, required = False, help = 'Optional argument. Number of flanking genes to plot upstream and downstream of each TF candidate, 4 as default value.')    
@@ -1575,7 +1584,7 @@ class IncorrectInput(NameError):
 		return "%s is not an accepted input" %(self.__input)
 
 # PIPELINE CORE MODULES 
-def HMMER_module(organism_proteome, structural_superimposition=False, current_directory='.', executable_path='.', db_fasta='TF_databases/TF_database_merged.fasta', db_tsv='TF_databases/TF_database_merged.tsv'):
+def HMMER_module(organism_proteome, structural_superimposition=False, current_directory='.', db_fasta=None, db_tsv=None):
     '''
     When HMMER3.3.2 (http://hmmer.org/) is locally installed and provided with 2 fastas:
         1. Downloads and prepares the Pfam-A database.
@@ -1615,7 +1624,7 @@ def HMMER_module(organism_proteome, structural_superimposition=False, current_di
         hmmscan_file = current_directory+'/'+'hmmscan_output_parsed.tsv'
     else: 
         logging.info('Starting hmmscan...')
-        os.system('hmmscan -E 0.001 --domtblout {}hmmscan_out.tsv {}Pfam-A.hmm {} > hmmscan.out'.format(current_directory, current_directory, executable_path+db_fasta))
+        os.system('hmmscan -E 0.001 --domtblout {}hmmscan_out.tsv {}Pfam-A.hmm {} > hmmscan.out'.format(current_directory, current_directory, db_fasta))
         logging.info('hmmscan of {} finished.'.format(db_fasta.split('/')[-1]))
 
         # 2.1 Parse the output hmmscan file and remove overlapping domains with lower e-values
@@ -1636,7 +1645,7 @@ def HMMER_module(organism_proteome, structural_superimposition=False, current_di
         logging.info('Starting hmmsearch...')
         os.system('hmmsearch --domtblout hmmsearch_out.tsv -E 0.001 hmmfetch_out {} > hmmsearch.out'.format(organism_proteome))
         logging.info('hmmsearch of domains retrieved from {} into {} done'.format(db_fasta.split('/')[-1], organism_proteome.split('/')[-1]))
-        hmmsearch_file = hmmsearch_parser('hmmsearch_out.tsv', hmmscan_file, executable_path+db_tsv)
+        hmmsearch_file = hmmsearch_parser('hmmsearch_out.tsv', hmmscan_file, db_tsv)
 
     hmmer_df = only_hits_with_all_domains(hmmsearch_file)
 
@@ -1687,7 +1696,7 @@ def TMAlign_module(hmmer_df, TMAlign_threshold=None):
 
     return TMalign_results_file
 
-def GC_module(hmmer_df, path2gff=None, path2fna=None, TM_Align_file=None, n_flanking5=None, n_flanking3=None, executable_path='.', n_module=2, method='psiblast', mmseqs=None, psiblast=None):
+def GC_module(hmmer_df, path2gff=None, path2fna=None, TM_Align_file=None, n_flanking5=None, n_flanking3=None, db_tsv=None, executable_path = '.', n_module=2, method='psiblast', mmseqs=None, psiblast=None):
     '''
     GC_module can be executed with hmmer or TM-Align output (TM_Align_file)
         1. Downloads the genomic files for every protein 
@@ -1701,7 +1710,7 @@ def GC_module(hmmer_df, path2gff=None, path2fna=None, TM_Align_file=None, n_flan
     os.chdir('{}_GC'.format(n_module))
     pwd = os.getcwd()
     # 1. Get the target dict with targets and gff and fna path for all targets
-    targets_dict = retrieve_targets_dict(hmmer_df, path2gff=path2gff, path2fna=path2fna, TM_Align_file=TM_Align_file, executable_path=executable_path)
+    targets_dict = retrieve_targets_dict(hmmer_df, path2gff=path2gff, path2fna=path2fna, TM_Align_file=TM_Align_file, db_tsv=db_tsv, executable_path=executable_path)
 
     plasmids = ['CAC00710.1','CAA42755.1','AJ278371','ACM50924.1','CAB82848.1','CAA43986.1','AAC36842.1','AAA25771.1','BAA95688.1','CAA70737.1','AAM93193.1', 'AAP70493.1','ADO85569.1','AEM66515.1','AAA21920.1','BAD11074.1','AAP83141.1','BAB32408.1','AFI98560.1','ACO06750.1','AAB36583.1','AAK38101.1', 'ANB66399.1', 'AAG00065.1', 'AAA25445.1', 'AAA68939.2', 'CAC87048.1', 'BAA36282.1']
 
@@ -1758,8 +1767,29 @@ def main():
     current_directory = os.getcwd()
 
     # Process arguments
-    fastafile = current_directory + '/' + args.fastafile
-    gff3file = current_directory + '/' + args.gff3file
+    fastafile = os.path.abspath(args.fastafile)
+    gff3file = os.path.abspath(args.gff3file)
+    if os.path.isfile(args.custom_db_tsv) and args.custom_db_fasta == None: 
+        db_tsv = os.path.abspath(args.custom_db_tsv)
+        try: 
+            df = pd.read_csv(db_tsv, sep='\t')
+            fasta = db_tsv.split('/')[-1].split('.')[0]+'.fasta'
+            extract_fasta_from_Uniprot(df['UniprotID'], fasta)
+            db_fasta = os.path.abspath(fasta)
+        except:
+            logging.error('Please provide a .tsv database file compliant with the template.')
+            raise IncorrectInput(args.custom_database)
+    elif os.path.isfile(args.custom_db_tsv) and os.path.isfile(args.custom_db_fasta):
+        db_tsv = os.path.abspath(args.custom_db_tsv)
+        db_fasta = os.path.abspath(args.custom_db_fasta)
+        f = open(db_fasta, 'r').read()
+        assert f[0] == '>', 'The database fasta file does not follow the template provided'
+        assert len(f.split('\n')[0].split('|')[1]) == 6, 'The database fasta file does not follow the template provided'
+    elif args.custom_db_tsv == None:
+        db_tsv = executable_path+'TF_databases/TF_database_merged.tsv'
+        db_fasta = executable_path+'TF_databases/TF_database_merged.fasta'
+
+
 
     n_flanking = args.n_flanking
     n_flanking5 = args.n_flanking5
@@ -1784,16 +1814,16 @@ def main():
                 tmalign_min_threshold = args.tmalign_min_threshold
 
                 # 2. HMMER
-                hmmer_df = HMMER_module(organism_proteome, structural_superimposition=True, current_directory=current_directory, executable_path=executable_path)
+                hmmer_df = HMMER_module(organism_proteome, structural_superimposition=True, current_directory=current_directory, db_fasta=db_fasta, db_tsv=db_tsv)
                 # 3. TM-Align
                 TMalign_results_file = TMAlign_module(hmmer_df, TMAlign_threshold=tmalign_min_threshold)
                 # 4. Genomic Context plotting of the TM_align candidates
-                GC_module(hmmer_df, path2gff=gff3file, path2fna=fastafile, TM_Align_file=TMalign_results_file, n_flanking5=n_flanking5, n_flanking3=n_flanking3, executable_path=executable_path, n_module=3, method=GC_method, mmseqs=mmseqs_path, psiblast=blast_path)
+                GC_module(hmmer_df, path2gff=gff3file, path2fna=fastafile, TM_Align_file=TMalign_results_file, n_flanking5=n_flanking5, n_flanking3=n_flanking3, db_tsv=db_tsv, executable_path=executable_path, n_module=3, method=GC_method, mmseqs=mmseqs_path, psiblast=blast_path)
             else: 
                 # 2. HMMER
-                hmmer_df = HMMER_module(organism_proteome, current_directory=current_directory)
+                hmmer_df = HMMER_module(organism_proteome, current_directory=current_directory, db_fasta=db_fasta, db_tsv=db_tsv)
                 # 3. Genomic Context plotting of the HMMER candidates
-                GC_module(hmmer_df, path2gff=gff3file, path2fna=fastafile, n_flanking5=n_flanking5, n_flanking3=n_flanking3, executable_path=executable_path, method=GC_method, mmseqs=mmseqs_path, psiblast=blast_path)
+                GC_module(hmmer_df, path2gff=gff3file, path2fna=fastafile, n_flanking5=n_flanking5, n_flanking3=n_flanking3, db_tsv=db_tsv, executable_path=executable_path, method=GC_method, mmseqs=mmseqs_path, psiblast=blast_path)
         else:
             logging.error('Please provide a GFF3 formatted file.')
             raise IncorrectInput(args.gff3file)

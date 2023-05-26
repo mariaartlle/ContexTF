@@ -58,6 +58,20 @@ ContexTF -fna example/input/GCA_000008345.1_ASM834v1_genomic.fna -gff3 example/i
 
 ```
 
+### Example with custom database
+ContexTF can be executed with your own set of proteins to search in the input genome, not only the transcription factor database. For this, fill the templates provided to build your protein set with the required fields. Regarding the assemblies, you can provide the link for the NCBI ftp site ([example]) (https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/009/045/GCF_000009045.1_ASM904v1/) or provide the local paths to your GFF3 and FNA files with the following format: /your/absolute/local/path/to/GFF3|/your/absolute/local/path/to/FNA
+
+Flag the arguments ```--custom_db_tsv``` and ```--custom_db_fasta``` to provide your custom databases. If only flagged the argument ```--custom_db_tsv```, the protein fasta file with the sequences will be obtained by mapping through the Uniprot API. Ensure that the proteins in the custom database have AlphaFold structures predicted to be able to run the structural homology module.
+
+```shell
+# Only needs the .tsv file to execute 
+ContexTF -fna example/input/GCA_000008345.1_ASM834v1_genomic.fna -gff3 example/input/GCA_000008345.1_ASM834v1_genomic.gff --custom_db_tsv custom_database_template.tsv --tmalign --n_flanking 8 
+
+# Alternatively
+ContexTF -fna example/input/GCA_000008345.1_ASM834v1_genomic.fna -gff3 example/input/GCA_000008345.1_ASM834v1_genomic.gff --custom_db_tsv custom_database_template.tsv --custom_db_fasta custom_database_template.fasta --tmalign --n_flanking 8 
+
+```
+
 ## Bibliography
 Andreeva, A., Kulesha, E., Gough, J., & Murzin, A. G. (2020). The SCOP database in 2020: expanded classification of representative family and superfamily domains of known protein structures. Nucleic Acids Research, 48(D1), D376–D382. https://doi.org/10.1093/nar/gkz1064
 
