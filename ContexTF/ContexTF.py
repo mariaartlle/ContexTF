@@ -1521,7 +1521,7 @@ def draw_genomic_context(all_syntenies, protein_families_summary, targets_dict, 
 
     markers = [Line2D([], [], marker=">", color=color, label=family) for family, color in color_dict.items()]
     
-    fig.legend(handles=markers, loc='center left', bbox_to_anchor=(1, 0.5), title="Families")
+    fig.legend(handles=markers, markerscale=6, loc='center left', bbox_to_anchor=(1, 0.5), title="Families", fontsize='20', title_fontsize='20')
 
     fig.savefig("{}.png".format(save_dir+figname))
 
